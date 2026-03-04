@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ultra Realistic Horse Race</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    overflow: hidden;
+    background: linear-gradient(to bottom, #87ceeb 0%, #c8e6c9 60%, #388e3c 100%);
+    font-family: 'Barlow', sans-serif;
+  }
+  canvas { display: block; }
+
+  #ui {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    z-index: 10;
+  }
+
+  #title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    color: #fff;
+    text-shadow: 2px 2px 8px rgba(0,0,0,0.6);
+    letter-spacing: 3px;
+  }
+
+  #startBtn {
+    padding: 12px 36px;
+    font-size: 18px;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 2px;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #d4a017, #f5c842);
+    color: #1a1a1a;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  #startBtn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+  #startBtn:active { transform: translateY(0); }
+
+  #winnerBanner {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.82);
+    border: 3px solid #f5c842;
+    border-radius: 16px;
+    padding: 30px 50px;
+    text-align: center;
+    z-index: 20;
+    animation: popIn 0.4s ease;
+  }
+  @keyframes popIn {
+    from { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+    to   { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+  }
+  #winnerBanner h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    color: #f5c842;
+    letter-spacing: 3px;
+  }
+  #winnerBanner p {
+    font-size: 20px;
+    color: #fff;
+    margin-top: 6px;
+  }
+
+  #savedMsg {
+    font-size: 13px;
+    color: #aaffaa;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div id="title">🏇 Horse Race</div>
+  <button id="startBtn" onclick="startRace()">START RACE</button>
+</div>
+
+<div id="winnerBanner">
+  <h2 id="winnerText">🏆 Horse 1 Wins!</h2>
+  <p>Congratulations!</p>
+  <div id="savedMsg"></div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+// ── Canvas setup ──────────────────────────────────────────────
+const canvas = document.getElementById("canvas");
+const ctx    = canvas.getContext("2d");
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
+
+// ── State ─────────────────────────────────────────────────────
+let horses      = [];
+let raceStarted = false;
+let winner      = null;
+let winnerSaved = false;
+
+// ── Horse colors ──────────────────────────────────────────────
+const HORSE_COLORS = [
+  "#8B4513","#D2691E","#F4A460","#1a1a1a",
+  "#C0C0C0","#8B0000","#DAA520"
+];
+const SADDLE_COLORS = [
+  "#e53935","#1e88e5","#43a047","#fdd835",
+  "#8e24aa","#fb8c00","#00acc1"
+];
+
+// ── Horse class ───────────────────────────────────────────────
+class Horse {
+  constructor(y, index) {
+    this.x        = 120;
+    this.y        = y;
+    this.speed    = Math.random() * 2.5 + 3;
+    this.legAngle = 0;
+    this.index    = index;
+    this.color    = HORSE_COLORS[index % HORSE_COLORS.length];
+    this.saddle   = SADDLE_COLORS[index % SADDLE_COLORS.length];
+    this.bobY     = 0;
+    this.bobDir   = 1;
+  }
+
+  update() {
+    if (!raceStarted || winner) return;
+    this.x        += this.speed;
+    this.legAngle += 0.22;
+    // Subtle vertical bob
+    this.bobY += 0.4 * this.bobDir;
+    if (Math.abs(this.bobY) > 3) this.bobDir *= -1;
+
+    if (this.x > canvas.width - 120 && !winner) {
+      winner = this;
+    }
+  }
+
+  draw() {
+    const bY = this.bobY;
+    ctx.save();
+    ctx.translate(this.x, this.y + bY);
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath();
+    ctx.ellipse(50, 44, 55, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, 20);
+    ctx.bezierCurveTo(20, -10, 80, -10, 100, 20);
+    ctx.bezierCurveTo(80, 42, 20, 42, 0, 20);
+    ctx.fill();
+
+    // Saddle
+    ctx.fillStyle = this.saddle;
+    ctx.beginPath();
+    ctx.ellipse(55, 10, 22, 10, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Saddle number
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 10px Barlow, Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(this.index + 1, 55, 14);
+
+    // Neck
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(88, 5);
+    ctx.bezierCurveTo(105, -8, 118, 0, 112, 18);
+    ctx.bezierCurveTo(100, 28, 88, 20, 88, 5);
+    ctx.fill();
+
+    // Head
+    ctx.beginPath();
+    ctx.moveTo(108, -5);
+    ctx.bezierCurveTo(128, -18, 138, -5, 125, 10);
+    ctx.bezierCurveTo(115, 18, 104, 12, 108, -5);
+    ctx.fill();
+
+    // Eye
+    ctx.fillStyle = "#111";
+    ctx.beginPath();
+    ctx.arc(128, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Nostril
+    ctx.fillStyle = "#7a2c00";
+    ctx.beginPath();
+    ctx.ellipse(134, 8, 3, 2, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mane
+    ctx.strokeStyle = darken(this.color, 50);
+    ctx.lineWidth = 4;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(92 - i * 6, -2);
+      ctx.bezierCurveTo(88 - i * 6, -18, 80 - i * 6, -22, 76 - i * 6, -8);
+      ctx.stroke();
+    }
+
+    // Tail
+    ctx.strokeStyle = darken(this.color, 40);
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, 20);
+    ctx.bezierCurveTo(-20, 5 + Math.sin(this.legAngle) * 8, -30, 30, -15, 40);
+    ctx.stroke();
+
+    // Legs (4)
+    this.drawLeg(22, 36,  this.legAngle);
+    this.drawLeg(42, 36, -this.legAngle);
+    this.drawLeg(62, 36,  this.legAngle);
+    this.drawLeg(82, 36, -this.legAngle);
+
+    ctx.restore();
+  }
+
+  drawLeg(x, y, angle) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.sin(angle) * 0.55);
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-4, 0, 8, 22);
+    // Hoof
+    ctx.fillStyle = "#333";
+    ctx.fillRect(-5, 20, 10, 8);
+    ctx.restore();
+  }
+}
+
+// ── Utility: darken a hex color ───────────────────────────────
+function darken(hex, amount) {
+  let c = parseInt(hex.replace("#",""), 16);
+  let r = Math.max(0, (c >> 16) - amount);
+  let g = Math.max(0, ((c >> 8) & 0xff) - amount);
+  let b = Math.max(0, (c & 0xff) - amount);
+  return `rgb(${r},${g},${b})`;
+}
+
+// ── Track ─────────────────────────────────────────────────────
+function drawTrack() {
+  const trackTop = 90;
+  const laneH    = 80;
+  const numLanes = 7;
+
+  // Grass
+  ctx.fillStyle = "#388e3c";
+  ctx.fillRect(0, trackTop - 20, canvas.width, laneH * numLanes + 60);
+
+  // Dirt track
+  ctx.fillStyle = "#c19a6b";
+  ctx.fillRect(0, trackTop, canvas.width, laneH * numLanes);
+
+  // Lane lines
+  ctx.strokeStyle = "rgba(255,255,255,0.4)";
+  ctx.lineWidth   = 1.5;
+  ctx.setLineDash([18, 12]);
+  for (let i = 0; i <= numLanes; i++) {
+    ctx.beginPath();
+    ctx.moveTo(0, trackTop + i * laneH);
+    ctx.lineTo(canvas.width, trackTop + i * laneH);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Starting gate
+  ctx.fillStyle = "#555";
+  ctx.fillRect(108, trackTop, 8, laneH * numLanes);
+
+  // Finish line (checkered)
+  const fx   = canvas.width - 90;
+  const sq   = 18;
+  const rows = Math.ceil((laneH * numLanes) / sq);
+  const cols = 2;
+  for (let r = 0; r < rows; r++) {
+    for (let cc = 0; cc < cols; cc++) {
+      ctx.fillStyle = (r + cc) % 2 === 0 ? "#000" : "#fff";
+      ctx.fillRect(fx + cc * sq, trackTop + r * sq, sq, sq);
+    }
+  }
+  // Finish post
+  ctx.strokeStyle = "#e53935";
+  ctx.lineWidth   = 3;
+  ctx.beginPath();
+  ctx.moveTo(fx, trackTop - 30);
+  ctx.lineTo(fx, trackTop + laneH * numLanes + 10);
+  ctx.stroke();
+
+  // "FINISH" label
+  ctx.save();
+  ctx.translate(fx + 30, trackTop + laneH * numLanes / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 20px 'Bebas Neue', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("FINISH", 0, 6);
+  ctx.restore();
+
+  // Horse number labels on left
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.font = "bold 14px 'Barlow', Arial";
+  ctx.textAlign = "left";
+  for (let i = 0; i < numLanes; i++) {
+    ctx.fillStyle = SADDLE_COLORS[i];
+    ctx.fillRect(12, trackTop + i * laneH + 28, 24, 24);
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.fillText(i + 1, 24, trackTop + i * laneH + 44);
+  }
+}
+
+// ── Sky & clouds ──────────────────────────────────────────────
+let cloudX = 0;
+function drawSky() {
+  const grad = ctx.createLinearGradient(0, 0, 0, 90);
+  grad.addColorStop(0, "#5ba3d9");
+  grad.addColorStop(1, "#b8daf5");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, 110);
+
+  cloudX = (cloudX + 0.3) % (canvas.width + 200);
+  drawCloud(cloudX - 100, 20);
+  drawCloud((cloudX + 300) % (canvas.width + 200) - 100, 40);
+  drawCloud((cloudX + 600) % (canvas.width + 200) - 100, 15);
+}
+function drawCloud(x, y) {
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  [[0,0,50,25],[40,-10,55,28],[-30,-8,48,24],[80,-5,40,22]].forEach(([dx,dy,rx,ry]) => {
+    ctx.beginPath();
+    ctx.ellipse(x + dx, y + dy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ── Main loop ─────────────────────────────────────────────────
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawSky();
+  drawTrack();
+
+  horses.forEach(h => { h.update(); h.draw(); });
+
+  if (winner && !winnerSaved) {
+    winnerSaved = true;
+    showWinner(winner.index + 1);
+    sendWinner("Horse " + (winner.index + 1));
+  }
+
+  requestAnimationFrame(animate);
+}
+
+// ── Create horses ─────────────────────────────────────────────
+function createHorses() {
+  horses = [];
+  for (let i = 0; i < 7; i++) {
+    horses.push(new Horse(130 + i * 80, i));
+  }
+}
+
+// ── Race controls ─────────────────────────────────────────────
+function startRace() {
+  if (raceStarted && !winner) return; // race in progress
+  raceStarted  = false;
+  winner       = null;
+  winnerSaved  = false;
+
+  document.getElementById("winnerBanner").style.display = "none";
+  document.getElementById("savedMsg").textContent = "";
+
+  createHorses();
+
+  setTimeout(() => { raceStarted = true; }, 300);
+}
+
+// ── Winner banner ─────────────────────────────────────────────
+function showWinner(num) {
+  const banner = document.getElementById("winnerBanner");
+  document.getElementById("winnerText").textContent = "🏆 Horse " + num + " Wins!";
+  banner.style.display = "block";
+}
+
+// ── Send winner to PHP backend ────────────────────────────────
+function sendWinner(name) {
+  fetch("save.php", {
+    method:  "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body:    "winner=" + encodeURIComponent(name)
+  })
+  .then(res => {
+    if (res.ok) {
+      document.getElementById("savedMsg").textContent = "✓ Result saved to database";
+    }
+  })
+  .catch(() => {
+    // Server not available — silently ignore in standalone mode
+    document.getElementById("savedMsg").textContent = "";
+  });
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+createHorses();
+animate();
+</script>
+</body>
+</html>
